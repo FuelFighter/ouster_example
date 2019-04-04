@@ -36,49 +36,50 @@ int main(int argc, char** argv) {
     int H = OS1::pixels_per_column;
     OS1::lidar_mode mode = OS1::MODE_1024x10;
 
-    try {
-        int c = 0;
-        while ((c = getopt(argc, argv, "hm:")) != -1) {
-            switch (c) {
-                case 'h':
-                    print_help();
-                    return 1;
-                    break;
-                case 'm':
-                    mode = OS1::lidar_mode_of_string(optarg);
-                    if (mode) {
-                        W = OS1::n_cols_of_lidar_mode(mode);
-                    } else {
-                        std::cout << "Lidar Mode must be 512x10, 512x20, "
-                                     "1024x10, 1024x20, or 2048x10"
-                                  << std::endl;
-                        print_help();
-                        std::exit(EXIT_FAILURE);
-                    }
-                    break;
-                case '?':
-                    std::cout << "Invalid Argument Format" << std::endl;
-                    print_help();
-                    std::exit(EXIT_FAILURE);
-                    break;
-            }
-        }
-    } catch (const std::exception& ex) {
-        std::cout << "Invalid Argument Format: " << ex.what() << std::endl;
-        print_help();
-        std::exit(EXIT_FAILURE);
-    }
+    //try {
+    //    int c = 0;
+    //    while ((c = getopt(argc, argv, "hm:")) != -1) {
+    //        switch (c) {
+    //            case 'h':
+    //                print_help();
+    //                return 1;
+    //                break;
+    //            case 'm':
+    //                mode = OS1::lidar_mode_of_string(optarg);
+    //                if (mode) {
+    //                    W = OS1::n_cols_of_lidar_mode(mode);
+    //                } else {
+    //                    std::cout << "Lidar Mode must be 512x10, 512x20, "
+    //                                 "1024x10, 1024x20, or 2048x10"
+    //                              << std::endl;
+    //                    print_help();
+    //                    std::exit(EXIT_FAILURE);
+    //                }
+    //                break;
+    //            case '?':
+    //                std::cout << "Invalid Argument Format" << std::endl;
+    //                print_help();
+    //                std::exit(EXIT_FAILURE);
+    //                break;
+    //        }
+    //    }
+    //} catch (const std::exception& ex) {
+    //    std::cout << "Invalid Argument Format: " << ex.what() << std::endl;
+    //    print_help();
+    //    std::exit(EXIT_FAILURE);
+    //}
 
-    if (argc != optind + 2) {
-        std::cerr << "Expected 2 arguments after options" << std::endl;
-        print_help();
-        std::exit(EXIT_FAILURE);
-    }
+    //if (argc != optind + 2) {
+    //    std::cerr << "Expected 2 arguments after options" << std::endl;
+    //    print_help();
+    //    std::exit(EXIT_FAILURE);
+    //}
 
     std::cout << "Sensor: " << argv[optind]
               << " UDP Destination:" << argv[optind + 1] << std::endl;
     std::shared_ptr<OS1::client> cli;
-    cli = OS1::init_client(argv[optind], argv[optind + 1], mode);
+    //cli = OS1::init_client(argv[optind], argv[optind + 1], mode);
+    cli = OS1::init_client("192.168.1.77", "192.168.1.1", mode);
     if (!cli) {
         std::cerr << "Failed to connect to client at: " << argv[optind]
                   << std::endl;

@@ -2,8 +2,10 @@
 #include <cstring>
 #include <iomanip>
 #include <iostream>
+#include <eigen3/Eigen/Dense>
 
 #include "ouster/os1.h"
+#include "ouster/os1_util.h"
 #include "ouster/os1_packet.h"
 
 namespace OS1 = ouster::OS1;
@@ -17,11 +19,81 @@ uint64_t imu_ts = 0;
 float lidar_col_0_h_angle = 0.0;
 float imu_av_z = 0.0;
 float imu_la_y = 0.0;
+uint32_t range = 0.0;
+
 
 void handle_lidar(uint8_t* buf) {
-    n_lidar_packets++;
-    lidar_col_0_ts = OS1::col_timestamp(OS1::nth_col(0, buf));
-    lidar_col_0_h_angle = OS1::col_h_angle(OS1::nth_col(0, buf));
+
+    static const uint32_t H = OS1::pixels_per_column;
+    static const uint32_t W = OS1::n_cols_of_lidar_mode(OS1::MODE_1024x10);
+
+    static const auto xyz_lut = OS1::make_xyz_lut(W, H, OS1::beam_azimuth_angles,
+                                     OS1::beam_altitude_angles);
+
+    static int next_m_id{W};
+    static int32_t cur_f_id{-1};
+    static int64_t scan_ts{-1L};
+
+
+    //n_lidar_packets++;
+    //lidar_col_0_ts = OS1::col_timestamp(OS1::nth_col(0, buf));
+    //lidar_col_0_h_angle = OS1::col_h_angle(OS1::nth_col(0, buf));
+    //range = OS1::px_range(buf);
+
+
+    for (int icol = 0; icol < OS1::columns_per_buffer; icol++) {
+      const uint8_t* col_buf = OS1::nth_col(icol, buf);
+      const uint16_t m_id = OS1::col_measurement_id(col_buf);
+      const uint16_t f_id = OS1::col_frame_id(col_buf);
+      const uint64_t ts = OS1::col_timestamp(col_buf);
+      const bool valid = OS1::col_valid(col_buf) == 0xffffffff;
+
+      // drop invalid / out-of-bounds data in case of misconfiguration
+      if (!valid || m_id >= W || f_id + 1 == cur_f_id) continue;
+
+      if (f_id != cur_f_id) {
+        //// if not initializing with first packet
+        //if (scan_ts != -1) {
+        //    // zero out remaining missing columns
+        //    std::fill(it + (H * next_m_id), it + (H * W), empty);
+        //    f(scan_ts);
+        //}
+
+        // start new frame
+        scan_ts = ts;
+        next_m_id = 0;
+        cur_f_id = f_id;
+      }
+
+      //// zero out missing columns if we jumped forward
+      //if (m_id >= next_m_id) {
+      //  std::fill(it + (H * next_m_id), it + (H * m_id), empty);
+      //  next_m_id = m_id + 1;
+      //}
+
+      // index of the first point in current packet
+      const int idx = H * m_id;
+
+      for (uint8_t ipx = 0; ipx < H; ipx++) {
+        const uint8_t* px_buf = OS1::nth_px(ipx, col_buf);
+        uint32_t r = OS1::px_range(px_buf);
+        int ind = 3 * (idx + ipx);
+
+        // x, y, z(m), i, ts, reflectivity, ring, noise, range (mm)
+        //it[idx + ipx] = c(r * 0.001f * xyz_lut[ind + 0],
+        Eigen::Vector3f p(
+          r * 0.001f * xyz_lut[ind + 0],
+          r * 0.001f * xyz_lut[ind + 1],
+          r * 0.001f * xyz_lut[ind + 2]
+        );
+          
+        //    OS1::px_signal_photons(px_buf), ts - scan_ts,
+        //    OS1::px_reflectivity(px_buf), ipx,
+        //    OS1::px_noise_photons(px_buf), r};
+
+        std::cout << p(0) << "\t" << p(1) << "\t" << p(2) << "\n";
+      }
+    }
 }
 
 void handle_imu(uint8_t* buf) {
@@ -34,6 +106,7 @@ void handle_imu(uint8_t* buf) {
 void print_headers() {
     std::cout << std::setw(15) << "n_lidar_packets" << std::setw(15)
               << "col_0_azimuth" << std::setw(15) << "col_0_ts" << std::setw(15)
+              << "range" << std::setw(15)
               << "n_imu_packets" << std::setw(15) << "im_av_z" << std::setw(15)
               << "im_la_y" << std::setw(15) << "imu_ts" << std::endl;
 }
@@ -41,22 +114,24 @@ void print_headers() {
 void print_stats() {
     std::cout << "\r" << std::setw(15) << n_lidar_packets << std::setw(15)
               << lidar_col_0_h_angle << std::setw(15) << lidar_col_0_ts
+              << std::setw(15) << range
               << std::setw(15) << n_imu_packets << std::setw(15) << imu_av_z
               << std::setw(15) << imu_la_y << std::setw(15) << imu_ts;
     std::flush(std::cout);
 }
 
-int main(int argc, char** argv) {
-    if (argc != 3) {
-        std::cerr << "Usage: ouster_client_example <os1_hostname> "
-                     "<data_destination_ip>"
-                  << std::endl;
-        return 1;
-    }
+int main() {
+    //if (argc != 3) {
+    //    std::cerr << "Usage: ouster_client_example <os1_hostname> "
+    //                 "<data_destination_ip>"
+    //              << std::endl;
+    //    return 1;
+    //}
 
-    auto cli = OS1::init_client(argv[1], argv[2]);
+    //auto cli = OS1::init_client(argv[1], argv[2]);
+    auto cli = OS1::init_client("192.168.1.77", "192.168.1.1");
     if (!cli) {
-        std::cerr << "Failed to connect to client at: " << argv[1] << std::endl;
+        std::cerr << "Failed to connect to client at: " << "192.168.1.77" << std::endl;
         return 1;
     }
 
@@ -76,7 +151,8 @@ int main(int argc, char** argv) {
             if (OS1::read_imu_packet(*cli, imu_buf)) handle_imu(imu_buf);
         }
 
-        if (n_imu_packets % 50 == 0) print_stats();
+        //if (n_imu_packets % 50 == 0) print_stats();
+        //print_stats();
     }
 
     return 0;
